@@ -121,12 +121,13 @@ class Server:
             if val["status"]:
                 winner = val["name"]
 
-        message = (winner + " is the winner !\n").encode()
+        message = (winner + " is the winner !").encode()
         for sock in self.players.keys():
             sock.send(message)
         time.sleep(0.5)
+
         for sock in self.players.keys():
-            sock.send("done\n".encode())
+            sock.send("done".encode())
             sock.close()
 
 
@@ -203,6 +204,7 @@ class Server:
         # kill UDP thread
         with self.condition_stack:
             self.condition_stack.notify_all()
+        time.sleep(0.5)
         print("Starting game...")
         self.state = 1
 
@@ -225,28 +227,30 @@ class Server:
             self.condition.wait()
 
         while self.state == 1:
-
-            question = str(list(self.questions.keys())[self.questions_order[self.question_index]]) + "\n"
+            question = str(list(self.questions.keys())[self.questions_order[self.question_index]])
             client_socket.send(question.encode())
             # receive answer
             if not self.players[client_socket]["status"]:
                 with self.condition:
                     self.condition.wait()
                     continue
-            time.sleep(0.1)
-            client_socket.send("input\n".encode())
 
+            time.sleep(0.3)
+            client_socket.send("input".encode())
+            print("Waiting for answer...")
             data = client_socket.recv(1024)
+            print("Received answer")
+
             answer = data.decode() in ['Y', 'T', '1']
             if not answer == self.questions[question]:
                 self.players[client_socket]["status"] = False
-                client_socket.send("wrong\n".encode())
+                client_socket.send("wrong".encode())
                 with self.lock:
                     self.wrong_answers.add(client_socket)
                     # self.players_alive -= 1
                     self.answers += 1
             else:
-                client_socket.send("correct\n".encode())
+                client_socket.send("correct".encode())
                 with self.lock:
                     self.correct_answers.add(client_socket)
                     self.answers += 1

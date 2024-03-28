@@ -56,24 +56,22 @@ class Client:
         self.TCP_Socket.settimeout(20)
         while True:
             try:
-                time.sleep(0.2)
-                # get the server message
                 try:
                     data = self.TCP_Socket.recv(1024)
                 except:
                     break
                 data = data.decode()
-                if data == "wrong\n":
+                if data == "wrong":
                     self.done = True
                     continue
-                elif data == "correct\n":
+                elif data == "correct":
                     continue
-                elif data == "done\n":
+                elif data == "done":
                     print("Game over!")
                     break
-                elif data != "input\n": # print the question \ winner message
+                elif data != "input": # print the question \ winner message
                     print(data)
-                if not self.done and data == "input\n":
+                if not self.done and data == "input":
                     # get a char from keyboard and send it to the server
                     char = input("Enter Y,T,1 for True, or N,F,0 for False: ")
                     if char not in ['Y', 'T', '1', 'N', 'F', '0']:
