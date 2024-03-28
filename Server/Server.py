@@ -69,6 +69,7 @@ class Server:
             self.start_client_threads()
             # Game manager thread
             self.game_manager()
+            self.state = 1
 
     def game_manager(self):
         while self.players_alive > 1:
@@ -111,7 +112,7 @@ class Server:
                     with self.condition:
                         self.condition.notify_all()
         print("End Game manager")
-        # self.state = 2
+        return
 
 
     def send_winner_for_all(self):
@@ -147,13 +148,14 @@ class Server:
         while self.state == 0:
             with self.condition_stack:
                 self.condition_stack.wait()
-            if len(self.stack) > 0:
-                client_thread = self.stack.pop()
-                try:
-                    client_thread.start()
-                    print("Thread started\n")
-                except:
-                    print("Error starting thread")
+            with self.lock:
+                if len(self.stack) > 0:
+                    client_thread = self.stack.pop()
+                    try:
+                        client_thread.start()
+                        print("Thread started\n")
+                    except:
+                        print("Error starting thread")
 
     def UDP_server(self):
 
@@ -191,8 +193,9 @@ class Server:
             # start thread for client
             client_thread = threading.Thread(target=self.TCP_client, args=(client_socket,))
             self.players[client_socket] = {"name": None, "status": True}
+
+            self.players_alive += 1
             with self.lock:
-                self.players_alive += 1
                 self.stack.append(client_thread)
             with self.condition_stack:
                 self.condition_stack.notify_all()

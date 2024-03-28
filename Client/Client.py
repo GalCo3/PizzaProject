@@ -1,4 +1,5 @@
 import socket
+import time
 import random
 names = ["Alice", "Bob", "Charlie", "David", "Eve", "Frank", "Grace", "Heidi", "Ivan", "Judy"]
 def parse_UDP_Message(data):
@@ -55,6 +56,7 @@ class Client:
         self.TCP_Socket.settimeout(20)
         while True:
             try:
+                time.sleep(0.2)
                 # get the server message
                 try:
                     data = self.TCP_Socket.recv(1024)
