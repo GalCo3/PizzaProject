@@ -61,15 +61,14 @@ class Server:
         self.condition_stack = threading.Condition()
 
     def main_loop(self):
-        # start UDP thread
-        self.UDP_server()
-        # start TCP thread
-        self.TCP_server()
-
-        self.start_client_threads()
-
-        # Game manager thread
-        self.game_manager()
+        while True:
+            # start UDP thread
+            self.UDP_server()
+            # start TCP thread
+            self.TCP_server()
+            self.start_client_threads()
+            # Game manager thread
+            self.game_manager()
 
     def game_manager(self):
         while self.players_alive > 1:
@@ -104,10 +103,16 @@ class Server:
                     if self.question_index == len(self.questions):
                         self.shuffle()
                         self.question_index = 0
+                    self.send_stats_for_all()
+                    if self.players_alive == 1:
+                        self.state = 2
+                        self.send_winner_for_all()
+                        time.sleep(0.1)
                     with self.condition:
                         self.condition.notify_all()
-                    self.send_stats_for_all()
-        self.send_winner_for_all()
+        print("End Game manager")
+        # self.state = 2
+
 
     def send_winner_for_all(self):
         winner = ""
@@ -118,6 +123,11 @@ class Server:
         message = (winner + " is the winner !").encode()
         for sock in self.players.keys():
             sock.send(message)
+        time.sleep(0.5)
+        for sock in self.players.keys():
+            sock.send("done".encode())
+            sock.close()
+
 
     def send_stats_for_all(self):
         message = ""
@@ -141,7 +151,7 @@ class Server:
                 client_thread = self.stack.pop()
                 try:
                     client_thread.start()
-                    print("Thread started")
+                    print("Thread started\n")
                 except:
                     print("Error starting thread")
 
@@ -221,16 +231,20 @@ class Server:
                 with self.condition:
                     self.condition.wait()
                     continue
+            time.sleep(0.1)
+            client_socket.send("input".encode())
 
             data = client_socket.recv(1024)
             answer = data.decode() in ['Y', 'T', '1']
             if not answer == self.questions[question]:
                 self.players[client_socket]["status"] = False
+                client_socket.send("wrong".encode())
                 with self.lock:
                     self.wrong_answers.add(client_socket)
                     # self.players_alive -= 1
                     self.answers += 1
             else:
+                client_socket.send("correct".encode())
                 with self.lock:
                     self.correct_answers.add(client_socket)
                     self.answers += 1
@@ -240,6 +254,8 @@ class Server:
 
             with self.condition:
                 self.condition.wait()
+
+
 
 
 server = Server()

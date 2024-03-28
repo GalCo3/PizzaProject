@@ -1,6 +1,6 @@
 import socket
-
-
+import random
+names = ["Alice", "Bob", "Charlie", "David", "Eve", "Frank", "Grace", "Heidi", "Ivan", "Judy"]
 def parse_UDP_Message(data):
     if len(data) != 39:
         return False, False
@@ -28,8 +28,8 @@ def parse_UDP_Message(data):
 
 class Client:
     def __init__(self, name, portListen):
-        self.score = 0
-        self.name = name
+
+        self.name = random.choice(names)
 
         self.server_ip = None
 
@@ -40,27 +40,43 @@ class Client:
         self.TCP_Socket = None
 
         self.server_name = None
-
+        self.done = False
         self.main_loop()
 
     def main_loop(self):
+        print(self.name)
         while True:
             self.UDP_Listen()
             if self.TCP_Connect():
                 self.TCP_client()
 
     def TCP_client(self):
+        #set the timeout to 20 seconds
+        self.TCP_Socket.settimeout(20)
         while True:
             try:
                 # get the server message
-                data = self.TCP_Socket.recv(1024)
-                print(data)
-
-                # get a char from keyboard and send it to the server
-                char = input("Enter Y,T,1 for True, or N,F,0 for False: ")
-                if char not in ['Y', 'T', '1', 'N', 'F', '0']:
+                try:
+                    data = self.TCP_Socket.recv(1024)
+                except:
+                    break
+                data = data.decode()
+                if data == "wrong":
+                    self.done = True
                     continue
-                self.TCP_Socket.send(char.encode())
+                elif data == "correct":
+                    continue
+                elif data == "done":
+                    print("Game over!")
+                    break
+                elif data != "input": # print the question \ winner message
+                    print(data)
+                if not self.done and data == "input":
+                    # get a char from keyboard and send it to the server
+                    char = input("Enter Y,T,1 for True, or N,F,0 for False: ")
+                    if char not in ['Y', 'T', '1', 'N', 'F', '0']:
+                        continue
+                    self.TCP_Socket.send(char.encode())
             except:
                 print("Something went wrong, trying to reconnect...")
                 break
@@ -93,6 +109,7 @@ class Client:
             self.TCP_Socket.connect((self.server_ip, self.TCP_port))
             # send the client name
             self.TCP_Socket.send(self.name.encode() + b'\n')
+            print("Connected to the server!")
             return True
         except:
             print("Connection failed, trying again...")
