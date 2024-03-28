@@ -10,7 +10,7 @@ import select
 def create_message(server_name, port):
     magic_cookie = 0xabcddcba
     message_type = 0x2
-    # padd server name to 32 characters with null bytes
+    # pad server name to 32 characters with null bytes
     server_name = server_name.ljust(32, '\0')
     server_port = port
     message = magic_cookie.to_bytes(4, byteorder='big') + message_type.to_bytes(1,
@@ -32,6 +32,7 @@ class Server:
     question_index = 0
     players = {}  # map of player sockets to their names and status
     questions = create_question_bank()
+    questions_order = [i for i in range(len(questions))]
 
     stack = []
 
@@ -42,6 +43,7 @@ class Server:
     wrong_answers = set()
 
     def __init__(self):
+        random.shuffle(self.questions_order)
 
         self.UDP_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.UDP_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -68,9 +70,9 @@ class Server:
 
         # Game manager thread
         self.game_manager()
-    def game_manager(self):
-        while True:
 
+    def game_manager(self):
+        while self.players_alive > 1:
             with self.condition_gameManager:
                 self.condition_gameManager.wait()
             print("wrong answers - ", len(self.wrong_answers))
@@ -79,8 +81,8 @@ class Server:
             with self.lock:
 
                 if self.players_alive == len(self.wrong_answers):
-                    for socket in self.wrong_answers:
-                        self.players[socket]["status"] = True
+                    for sock in self.wrong_answers:
+                        self.players[sock]["status"] = True
                     self.wrong_answers.clear()
                     self.answers = 0
                     self.question_index += 1
@@ -105,27 +107,32 @@ class Server:
                     with self.condition:
                         self.condition.notify_all()
                     self.send_stats_for_all()
+        self.send_winner_for_all()
+
     def send_winner_for_all(self):
         winner = ""
         for val in self.players.values():
-            if val["status"] == True:
+            if val["status"]:
                 winner = val["name"]
 
         message = (winner + " is the winner !").encode()
-        for socket in self.players.keys():
-            socket.send(message)
+        for sock in self.players.keys():
+            sock.send(message)
+
     def send_stats_for_all(self):
         message = ""
-        for socket in self.correct_answers:
-            message += self.players[socket]["name"] +" is correct !\n"
-        for socket in self.wrong_answers:
-            message += self.players[socket]["name"] +" is iorrect !\n"
+        for sock in self.correct_answers:
+            message += self.players[sock]["name"] + " is correct !\n"
+        for sock in self.wrong_answers:
+            message += self.players[sock]["name"] + " is incorrect !\n"
 
         message = message.encode()
-        for socket in self.players.keys():
-            socket.send(message)
+        for sock in self.players.keys():
+            sock.send(message)
+
     def shuffle(self):
-        pass
+        random.shuffle(self.questions_order)
+
     def start_client_threads(self):
         while self.state == 0:
             with self.condition_stack:
@@ -207,10 +214,10 @@ class Server:
 
         while self.state == 1:
 
-            question = list(self.questions.keys())[self.question_index]
+            question = list(self.questions.keys())[self.questions_order[self.question_index]]
             client_socket.send(question.encode())
             # receive answer
-            if self.players[client_socket]["status"] == False:
+            if not self.players[client_socket]["status"]:
                 with self.condition:
                     self.condition.wait()
                     continue
@@ -227,7 +234,6 @@ class Server:
                 with self.lock:
                     self.correct_answers.add(client_socket)
                     self.answers += 1
-
 
             with self.condition_gameManager:
                 self.condition_gameManager.notify_all()
