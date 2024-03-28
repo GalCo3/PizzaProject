@@ -63,17 +63,17 @@ class Client:
                 except:
                     break
                 data = data.decode()
-                if data == "wrong":
+                if data == "wrong\n":
                     self.done = True
                     continue
-                elif data == "correct":
+                elif data == "correct\n":
                     continue
-                elif data == "done":
+                elif data == "done\n":
                     print("Game over!")
                     break
-                elif data != "input": # print the question \ winner message
+                elif data != "input\n": # print the question \ winner message
                     print(data)
-                if not self.done and data == "input":
+                if not self.done and data == "input\n":
                     # get a char from keyboard and send it to the server
                     char = input("Enter Y,T,1 for True, or N,F,0 for False: ")
                     if char not in ['Y', 'T', '1', 'N', 'F', '0']:
