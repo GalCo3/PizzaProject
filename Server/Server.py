@@ -69,7 +69,19 @@ class Server:
             self.start_client_threads()
             # Game manager thread
             self.game_manager()
-            self.state = 1
+            self.reset()
+
+    def reset(self):
+        self.state = 0
+        self.question_index = 0
+        self.players = {}
+        self.answers = 0
+        self.players_alive = 0
+        self.correct_answers = set()
+        self.wrong_answers = set()
+        self.stack = []
+        self.questions_order = [i for i in range(len(self.questions))]
+        self.shuffle()
 
     def game_manager(self):
         while self.players_alive > 1:
@@ -114,22 +126,20 @@ class Server:
         print("End Game manager")
         return
 
-
     def send_winner_for_all(self):
         winner = ""
         for val in self.players.values():
             if val["status"]:
                 winner = val["name"]
 
-        message = (winner + " is the winner !").encode()
+        message = winner + " is the winner !"
         for sock in self.players.keys():
-            sock.send(message)
+            self.send_to_TCP(message, sock)
         time.sleep(0.5)
 
         for sock in self.players.keys():
-            sock.send("done".encode())
+            self.send_to_TCP("done", sock)
             sock.close()
-
 
     def send_stats_for_all(self):
         message = ""
@@ -138,9 +148,8 @@ class Server:
         for sock in self.wrong_answers:
             message += self.players[sock]["name"] + " is incorrect !\n"
 
-        message = message.encode()
         for sock in self.players.keys():
-            sock.send(message)
+            self.send_to_TCP(message, sock)
 
     def shuffle(self):
         random.shuffle(self.questions_order)
@@ -204,9 +213,13 @@ class Server:
         # kill UDP thread
         with self.condition_stack:
             self.condition_stack.notify_all()
-        time.sleep(0.5)
+
+        time.sleep(1)
         print("Starting game...")
         self.state = 1
+
+        with self.condition_stack:
+            self.condition_stack.notify_all()
 
         with self.condition:
             self.condition.notify_all()
@@ -228,40 +241,42 @@ class Server:
 
         while self.state == 1:
             question = str(list(self.questions.keys())[self.questions_order[self.question_index]])
-            client_socket.send(question.encode())
+            self.send_to_TCP(question, client_socket)
             # receive answer
             if not self.players[client_socket]["status"]:
                 with self.condition:
                     self.condition.wait()
                     continue
 
-            time.sleep(0.3)
-            client_socket.send("input".encode())
-            print("Waiting for answer...")
+            time.sleep(0.5)
+            self.send_to_TCP("input", client_socket)
             data = client_socket.recv(1024)
-            print("Received answer")
 
             answer = data.decode() in ['Y', 'T', '1']
             if not answer == self.questions[question]:
                 self.players[client_socket]["status"] = False
-                client_socket.send("wrong".encode())
+                self.send_to_TCP("wrong", client_socket)
                 with self.lock:
                     self.wrong_answers.add(client_socket)
                     # self.players_alive -= 1
                     self.answers += 1
             else:
-                client_socket.send("correct".encode())
+                self.send_to_TCP("correct", client_socket)
                 with self.lock:
                     self.correct_answers.add(client_socket)
                     self.answers += 1
 
             with self.condition_gameManager:
                 self.condition_gameManager.notify_all()
+                print("Notified game manager\n")
 
             with self.condition:
                 self.condition.wait()
 
-
+    def send_to_TCP(self, message, socket):
+        # pad message to 512 bytes
+        message = message.ljust(512, '\0')
+        socket.send(message.encode())
 
 
 server = Server()

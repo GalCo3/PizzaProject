@@ -57,11 +57,13 @@ class Client:
         while True:
             try:
                 try:
-                    data = self.TCP_Socket.recv(1024)
+                    data = self.TCP_Socket.recv(512)
+                    data = data.decode('utf-8').split('\x00')[0]
                 except:
                     break
-                data = data.decode()
-                if data == "wrong":
+                if data == "":
+                    continue
+                elif data == "wrong":
                     self.done = True
                     continue
                 elif data == "correct":
