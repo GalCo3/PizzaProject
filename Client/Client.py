@@ -6,6 +6,10 @@ import threading
 import random
 import sys
 import msvcrt
+from colorama import init as colorama_init
+from colorama import Fore
+
+colorama_init()
 
 names = ["Galco", "Kitzer", "Kafire", "Megatron", "Max Verstappen", "Lebron James",
          "Megatron on the counter", "Element of surprise", "Every day another angle",
@@ -71,8 +75,10 @@ class Client:
 
         self.server_name = None
 
+        self.colors = [Fore.LIGHTBLUE_EX, Fore.LIGHTYELLOW_EX, Fore.LIGHTGREEN_EX, Fore.LIGHTRED_EX, Fore.LIGHTMAGENTA_EX, Fore.LIGHTCYAN_EX, Fore.RESET]
+
     def main_loop(self):
-        print(self.name)
+        print(random.choice(self.colors) + self.name)
         while True:
             self.listen_to_broadcasts()
             if self.TCP_Connect():
@@ -103,13 +109,13 @@ class Client:
                     raise ConnectionError
                 logging.info("Received: " + data.decode('utf-8'))
                 data = data.decode('utf-8').split('\x00')[0]
-                print("\n", data)
+                print("\n",random.choice(self.colors) + data)
             # except timeout error
             except timeout:
-                print("Connection timed out")
+                print(random.choice(self.colors) + "Connection timed out")
                 continue
             except ConnectionError or ConnectionResetError:
-                print("Connection closed")
+                print(random.choice(self.colors) + "Connection closed")
                 self.done = True
                 # interrupt STDIN
                 self.thread_STDIN.join(0)
@@ -129,13 +135,13 @@ class Client:
                 logging.info("Sent: " + message)
                 # print("Sent: " + message)
             except ConnectionError:
-                print("Connection closed")
+                print(random.choice(self.colors) + "Connection closed")
                 self.done = True
                 break
 
     def listen_to_broadcasts(self):
 
-        print("Client started, listening for offer requests...")
+        print(random.choice(self.colors) + "Client started, listening for offer requests...")
 
         self.UDP_Socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.UDP_Socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -155,17 +161,17 @@ class Client:
 
     def TCP_Connect(self):
         host_ip, _ = self.UDP_Socket.getsockname()  # for some reason host_ip is always 0.0.0.0, so it's not interesting
-        print("Received offer from \"" + self.server_name + "\", attempting to connect...")
+        print(random.choice(self.colors) + "Received offer from \"" + self.server_name + "\", attempting to connect...")
         self.TCP_Socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.TCP_Socket.settimeout(10)
         try:
             self.TCP_Socket.connect((self.server_ip, self.TCP_port))
             # send the client name
             self.TCP_Socket.send(self.name.encode() + b'\n')
-            print("Connected to the server!")
+            print(random.choice(self.colors) + "Connected to the server!")
             return True
         except:
-            print("Connection failed, trying again...")
+            print(random.choice(self.colors) + "Connection failed, trying again...")
             return False
 
 

@@ -1,4 +1,7 @@
 from Client import *
+from colorama import init as colorama_init
+
+colorama_init()
 
 
 class Bot(Client):
@@ -52,10 +55,10 @@ class Bot(Client):
                     # print("Notified")
             # except timeout error
             except timeout:
-                print("Connection timed out")
+                print(random.choice(self.colors) + "Connection timed out")
                 continue
             except ConnectionError or ConnectionResetError:
-                print("Connection closed")
+                print(random.choice(self.colors) + "Connection closed")
                 if not self.done:
                     self.done = True
                     with self.condition:
@@ -69,12 +72,12 @@ class Bot(Client):
                 message = random.choice(["Y", "N"])
                 self.TCP_Socket.send(message.encode())
                 logging.info("Sent: " + message)
-                print("Sent: " + message)
+                print(random.choice(self.colors) + "Sent: " + message)
                 with self.condition:
                     self.condition.wait()
                 time.sleep(1)
             except ConnectionError:
-                print("Connection closed")
+                print(random.choice(self.colors) + "Connection closed")
                 self.done = True
                 break
 
