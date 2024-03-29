@@ -1,8 +1,18 @@
 import socket
+from socket import timeout
 import time
 import logging
+import threading
 import random
-names = ["Alice", "Bob", "Charlie", "David", "Eve", "Frank", "Grace", "Heidi", "Ivan", "Judy"]
+import sys
+import msvcrt
+import select
+
+names = ["Galco", "Kitzer", "Kafire", "Megatron", "Max Verstappen", "Lebron James",
+         "Megatron on the counter", "Element of surprise", "Every day another angle",
+         "Magnus Carlsen", "John Cena", "Lightning McQueen"]
+
+
 def parse_UDP_Message(data):
     if len(data) != 39:
         return False, False
@@ -29,11 +39,12 @@ def parse_UDP_Message(data):
 
 
 class Client:
-    def __init__(self, name, portListen):
+    def __init__(self, portListen):
         self.name = random.choice(names)
-        logging.basicConfig(filename=self.name+"_Client.log",level=logging.DEBUG)
+        logging.basicConfig(filename=self.name + "_Client.log", level=logging.DEBUG)
 
         self.server_ip = None
+        self.done = False
 
         self.UDP_port = portListen
         self.UDP_Socket = None
@@ -41,8 +52,10 @@ class Client:
         self.TCP_port = None
         self.TCP_Socket = None
 
+        self.thread_STDIN = None
+        self.thread_STDOUT = None
+
         self.server_name = None
-        self.done = False
         self.main_loop()
 
     def main_loop(self):
@@ -51,46 +64,77 @@ class Client:
             self.UDP_Listen()
             if self.TCP_Connect():
                 self.TCP_client()
+                self.done = False
 
     def TCP_client(self):
-        #set the timeout to 20 seconds
+        # set the timeout to 20 seconds
         self.TCP_Socket.settimeout(20)
-        while True:
+        # start 2 threads, one for sending messages and one for receiving messages
+
+        self.thread_STDOUT = threading.Thread(target=self.get_TCP_message)
+        #stdin for intervals for 5 seconds
+        self.thread_STDIN = threading.Thread(target=self.send_TCP_message)
+
+        
+        self.thread_STDOUT.start()
+        self.thread_STDIN.start()
+
+        self.thread_STDOUT.join()
+        self.thread_STDIN.join()
+
+    def get_TCP_message(self):
+        while not self.done:
             try:
-                try:
-                    data = self.TCP_Socket.recv(512)
-                    logging.info("Received data: " + data.decode('utf-8'))
-                    data = data.decode('utf-8').split('\x00')[0]
-                    logging.info("Decoded data: " + data)
-                    
-                except:
-                    break
-                if data == "":
-                    continue
-                elif data == "wrong":
-                    # logging.info("Done = True")
-                    # self.done = True
-                    continue
-                elif data == "correct":
-                    continue
-                elif data == "done":
-                    print("Game over!")
-                    break
-                elif data != "input": # print the question \ winner message
-                    print(data)
-                elif data == "input": #and not self.done
-                    logging.info("Waiting for input")
-                    # get a char from keyboard and send it to the server
-                    char = input("Enter Y,T,1 for True, or N,F,0 for False: ")
-                    if char not in ['Y', 'T', '1', 'N', 'F', '0']:
-                        continue
-                    self.TCP_Socket.send(char.encode())
-                else:
-                    logging.info("Somthing Weird Happened - Done = " + self.done + " Data = " + data)
-            except:
-                print("Something went wrong, trying to reconnect...")
+                data = self.TCP_Socket.recv(1024)
+                #check if socket is closed
+                if not data:
+                    raise ConnectionError
+                logging.info("Received: " + data.decode('utf-8'))
+                data = data.decode('utf-8').split('\x00')[0]
+                print("\n",data)
+            # except timeout error
+            except timeout as e:
+                print("Connection timed out")
+                continue
+            except ConnectionError or ConnectionResetError :
+                print("Connection closed")
+                self.done = True
+                #interrupt STDIN
+                self.thread_STDIN.join(0)
                 break
 
+    def send_TCP_message(self):
+        while not self.done:
+            try:
+                #input timeout for 5 seconds
+
+                while not self.done:
+                    message = self.input_with_timeout("", 3)
+                    if message:
+                        break
+                
+                self.TCP_Socket.send(message.encode())
+                logging.info("Sent: " + message)
+                print("Sent: " + message)
+            except ConnectionError as e:
+                print("Connection closed")
+                self.done = True
+                break
+
+    def input_with_timeout(self,prompt, timeout):
+        sys.stdout.write(prompt)
+        sys.stdout.flush()
+        start_time = time.time()
+        input_data = ''
+        while True:
+            if msvcrt.kbhit():
+                char = msvcrt.getch()
+                if char == b'\r':  # Enter key
+                    break
+                input_data += char.decode()
+            if time.time() - start_time > timeout:
+                break
+        return input_data
     def UDP_Listen(self):
 
         print("Client started, listening for offer requests...")
@@ -126,4 +170,20 @@ class Client:
             return False
 
 
-client = Client("Client1", 13117)
+class Bot(Client):
+    def __init__(self, portListen):
+        super().__init__(portListen)
+        self.name = "BOT_" + self.name
+
+    def send_TCP_message(self):
+        while True:
+            try:
+                # True or
+                message = random.choice(["T", "F"])
+                self.TCP_Socket.send(message.encode())
+            except:
+                print("Connection closed")
+                break
+
+
+client = Client(13117)
