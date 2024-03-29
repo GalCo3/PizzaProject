@@ -21,7 +21,28 @@ def create_message(server_name, port):
 
 def create_question_bank():
     # return a dictionary of questions and answers true or false
-    return {"question1": True, "question2": False, "question3": True, "question4": False, "question5": True}
+    return {
+        "Pizza originated in Italy.": True,
+        "Hawaiian pizza typically includes pineapple and ham toppings.": True,
+        "The world's largest pizza ever made measured over 100 feet in diameter.": True,
+        "The first pizzeria in the United States opened in New York City.": True,
+        "Deep dish pizza was invented in Chicago.": True,
+        "Pizza Margherita was named after a queen.": True,
+        "The world's most expensive pizza costs over $12,000.": True,
+        "Pizza Hut was founded in the 1950s.": True,
+        "The pizza delivery industry is estimated to be worth over $10 billion annually.": True,
+        "The record for the most pizzas made in one hour is over 6,000.": True,
+        "Pizza boxes are generally square-shaped to fit the round pizza inside.": False,
+        "Neapolitan pizza should have a thin, crispy crust.": False,
+        "The pizza margherita was named after a famous Italian chef.": False,
+        "Authentic Italian pizza is typically topped with cheddar cheese.": False,
+        "The Hawaiian pizza originated in Hawaii.": False,
+        "The world's largest pizza was cooked in less than an hour.": False,
+        "The first frozen pizza was created in the 1940s.": False,
+        "Pizza delivery was first introduced in the 19th century.": False,
+        "The original pizza was sweet rather than savory.": False,
+        "The word 'pizza' is derived from Greek.": False
+    }
 
 
 players = {}  # map of player sockets to their names and status
