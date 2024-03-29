@@ -1,10 +1,9 @@
 import random
 import socket
-import sys
 import time
 import threading
 
-import select
+import logging
 
 
 def create_message(server_name, port):
@@ -14,7 +13,7 @@ def create_message(server_name, port):
     server_name = server_name.ljust(32, '\0')
     server_port = port
     message = magic_cookie.to_bytes(4, byteorder='big') + message_type.to_bytes(1,
-                                                                                byteorder='big') + server_name.encode() + server_port.to_bytes(
+                                                                                 byteorder='big') + server_name.encode() + server_port.to_bytes(
         2, byteorder='big')
     return message
 
@@ -24,13 +23,25 @@ def create_question_bank():
     return {"question1": True, "question2": False, "question3": True, "question4": False, "question5": True}
 
 
+def message_ACK(socket, message):
+    while True:
+        try:
+            data = socket.recv(512)
+            if data.decode() == message:
+                return
+        except:
+            continue
+
+
+players = {}  # map of player sockets to their names and status
+
+
 class Server:
     server_name = "PizzaProject"
 
     state = 0  # 0 = waiting for client, 1 = game mode
     timeout = 10
     question_index = 0
-    players = {}  # map of player sockets to their names and status
     questions = create_question_bank()
     questions_order = [i for i in range(len(questions))]
 
@@ -43,6 +54,9 @@ class Server:
     wrong_answers = set()
 
     def __init__(self):
+        #start logging to the desktop
+        logging.basicConfig(filename='Server.log', level=logging.DEBUG)
+
         random.shuffle(self.questions_order)
 
         self.UDP_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -66,7 +80,7 @@ class Server:
             self.UDP_server()
             # start TCP thread
             self.TCP_server()
-            self.start_client_threads()
+            # self.start_client_threads()
             # Game manager thread
             self.game_manager()
             self.reset()
@@ -74,7 +88,7 @@ class Server:
     def reset(self):
         self.state = 0
         self.question_index = 0
-        self.players = {}
+        players = {}
         self.answers = 0
         self.players_alive = 0
         self.correct_answers = set()
@@ -94,7 +108,7 @@ class Server:
 
                 if self.players_alive == len(self.wrong_answers):
                     for sock in self.wrong_answers:
-                        self.players[sock]["status"] = True
+                        players[sock]["status"] = True
                     self.wrong_answers.clear()
                     self.answers = 0
                     self.question_index += 1
@@ -123,32 +137,34 @@ class Server:
                         time.sleep(0.1)
                     with self.condition:
                         self.condition.notify_all()
-        print("End Game manager")
+        print("End Game manager\n\n")
         return
 
     def send_winner_for_all(self):
         winner = ""
-        for val in self.players.values():
+        for val in players.values():
             if val["status"]:
-                winner = val["name"]
+                # remove the last character which is a newline
+                winner = val["name"][:-1]
+                break
 
         message = winner + " is the winner !"
-        for sock in self.players.keys():
+        for sock in players.keys():
             self.send_to_TCP(message, sock)
         time.sleep(0.5)
 
-        for sock in self.players.keys():
+        for sock in players.keys():
             self.send_to_TCP("done", sock)
             sock.close()
 
     def send_stats_for_all(self):
         message = ""
         for sock in self.correct_answers:
-            message += self.players[sock]["name"] + " is correct !\n"
+            message += players[sock]["name"] + " is correct !\n"
         for sock in self.wrong_answers:
-            message += self.players[sock]["name"] + " is incorrect !\n"
+            message += players[sock]["name"] + " is incorrect !\n"
 
-        for sock in self.players.keys():
+        for sock in players.keys():
             self.send_to_TCP(message, sock)
 
     def shuffle(self):
@@ -156,8 +172,6 @@ class Server:
 
     def start_client_threads(self):
         while self.state == 0:
-            with self.condition_stack:
-                self.condition_stack.wait()
             with self.lock:
                 if len(self.stack) > 0:
                     client_thread = self.stack.pop()
@@ -166,6 +180,9 @@ class Server:
                         print("Thread started\n")
                     except:
                         print("Error starting thread")
+
+            with self.condition_stack:
+                self.condition_stack.wait()
 
     def UDP_server(self):
 
@@ -201,14 +218,14 @@ class Server:
                 continue
 
             # start thread for client
+            players[client_socket] = {"name": None, "status": True}
             client_thread = threading.Thread(target=self.TCP_client, args=(client_socket,))
-            self.players[client_socket] = {"name": None, "status": True}
-
             self.players_alive += 1
-            with self.lock:
-                self.stack.append(client_thread)
-            with self.condition_stack:
-                self.condition_stack.notify_all()
+            client_thread.start()
+            # with self.lock:
+            #     self.stack.append(client_thread)
+            # with self.condition_stack:
+            #     self.condition_stack.notify_all()
 
         # kill UDP thread
         with self.condition_stack:
@@ -226,11 +243,12 @@ class Server:
 
     def TCP_client(self, client_socket):
         # first receive is name
-        while self.players[client_socket]["name"] is None:
+        while players[client_socket]["name"] is None:
             try:
                 data = client_socket.recv(1024)
-                self.players[client_socket]["name"] = data.decode()
-                print("Client name: ", self.players[client_socket]["name"])
+                logging.info("Received: " + data.decode())
+                players[client_socket]["name"] = data.decode()
+                print("Client name: ", players[client_socket]["name"],end="\n\n")
             except:
                 print("timeout")
 
@@ -239,22 +257,29 @@ class Server:
         with self.condition:
             self.condition.wait()
 
+        client_socket.settimeout(10)
+
         while self.state == 1:
+
             question = str(list(self.questions.keys())[self.questions_order[self.question_index]])
             self.send_to_TCP(question, client_socket)
             # receive answer
-            if not self.players[client_socket]["status"]:
-                with self.condition:
-                    self.condition.wait()
-                    continue
+            with self.lock:
+                if not players[client_socket]["status"]:
+                    with self.condition:
+                        self.condition.wait()
+                        continue
 
             time.sleep(0.5)
             self.send_to_TCP("input", client_socket)
-            data = client_socket.recv(1024)
 
-            answer = data.decode() in ['Y', 'T', '1']
-            if not answer == self.questions[question]:
-                self.players[client_socket]["status"] = False
+            data = self.receive_from_TCP(client_socket)
+            if data == "":
+                continue
+
+            answer = data in ['Y', 'T', '1']
+            if not answer == self.questions[question] or data == "timeout":
+                players[client_socket]["status"] = False
                 self.send_to_TCP("wrong", client_socket)
                 with self.lock:
                     self.wrong_answers.add(client_socket)
@@ -268,16 +293,45 @@ class Server:
 
             with self.condition_gameManager:
                 self.condition_gameManager.notify_all()
-                print("Notified game manager\n")
 
             with self.condition:
                 self.condition.wait()
 
-    def send_to_TCP(self, message, socket):
+
+    def receive_from_TCP(self, socket):
+        while True:
+            try:
+                data = socket.recv(512)
+                data = data.decode('utf-8').split('\x00')[0]
+                return data
+            except Exception as e:
+                # check if socket is still open
+                if socket.fileno() == -1:
+                    self.socket_crashed(socket)
+                    return ""
+                # check if the exception is a timeout
+                elif e == socket.timeout:
+                    return "timeout"
+
+    def send_to_TCP(self,message, socket):
         # pad message to 512 bytes
         message = message.ljust(512, '\0')
-        socket.send(message.encode())
+        
+        try:
+            socket.send(message.encode())
+        #catch exception
+        except Exception as e:
+            # check if socket is still open
+            if socket.fileno() == -1:
+                self.socket_crashed(socket)
 
+    def socket_crashed(self, socket):
+        with self.lock:
+            self.answers += 1
+            players.pop(socket)
+            
+        with self.condition_gameManager:
+            self.condition_gameManager.notify_all()
 
 server = Server()
 server.main_loop()
