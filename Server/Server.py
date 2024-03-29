@@ -3,8 +3,8 @@ import socket
 from socket import timeout
 import time
 import threading
-
 import logging
+import pygame
 
 
 def create_message(server_name, port):
@@ -22,26 +22,27 @@ def create_message(server_name, port):
 def create_question_bank():
     # return a dictionary of questions and answers true or false
     return {
-        "Pizza originated in Italy.": True,
-        "Hawaiian pizza typically includes pineapple and ham toppings.": True,
-        "The world's largest pizza ever made measured over 100 feet in diameter.": True,
-        "The first pizzeria in the United States opened in New York City.": True,
-        "Deep dish pizza was invented in Chicago.": True,
-        "Pizza Margherita was named after a queen.": True,
-        "The world's most expensive pizza costs over $12,000.": True,
-        "Pizza Hut was founded in the 1950s.": True,
-        "The pizza delivery industry is estimated to be worth over $10 billion annually.": True,
-        "The record for the most pizzas made in one hour is over 6,000.": True,
-        "Pizza boxes are generally square-shaped to fit the round pizza inside.": False,
-        "Neapolitan pizza should have a thin, crispy crust.": False,
-        "The pizza margherita was named after a famous Italian chef.": False,
-        "Authentic Italian pizza is typically topped with cheddar cheese.": False,
-        "The Hawaiian pizza originated in Hawaii.": False,
-        "The world's largest pizza was cooked in less than an hour.": False,
-        "The first frozen pizza was created in the 1940s.": False,
-        "Pizza delivery was first introduced in the 19th century.": False,
-        "The original pizza was sweet rather than savory.": False,
-        "The word 'pizza' is derived from Greek.": False
+        # "Pizza originated in Italy.": True,
+        # "Hawaiian pizza typically includes pineapple and ham toppings.": True,
+        # "The world's largest pizza ever made measured over 100 feet in diameter.": True,
+        # "The first pizzeria in the United States opened in New York City.": True,
+        # "Deep dish pizza was invented in Chicago.": True,
+        # "Pizza Margherita was named after a queen.": True,
+        # "The world's most expensive pizza costs over $12,000.": True,
+        # "Pizza Hut was founded in the 1950s.": True,
+        # "The pizza delivery industry is estimated to be worth over $10 billion annually.": True,
+        # "The record for the most pizzas made in one hour is over 6,000.": True,
+        # "Pizza boxes are generally square-shaped to fit the round pizza inside.": False,
+        # "Neapolitan pizza should have a thin, crispy crust.": False,
+        # "The pizza margherita was named after a famous Italian chef.": False,
+        # "Authentic Italian pizza is typically topped with cheddar cheese.": False,
+        # "The Hawaiian pizza originated in Hawaii.": False,
+        # "The world's largest pizza was cooked in less than an hour.": False,
+        # "The first frozen pizza was created in the 1940s.": False,
+        # "Pizza delivery was first introduced in the 19th century.": False,
+        # "The original pizza was sweet rather than savory.": False,
+        # "The word 'pizza' is derived from Greek.": False
+        "question1": True
     }
 
 
@@ -64,7 +65,7 @@ class Server:
     correct_answers = set()
     wrong_answers = set()
 
-    def __init__(self, min_players):
+    def __init__(self):
         # start logging to the desktop
         logging.basicConfig(filename='Server.log', level=logging.DEBUG)
 
@@ -116,10 +117,7 @@ class Server:
         while self.players_alive > 1:
             with self.condition_gameManager:
                 self.condition_gameManager.wait()
-            print("wrong answers - ", len(self.wrong_answers))
-            print("correct answers - ", len(self.correct_answers))
-            print()
-            with self.lock:
+            with (self.lock):
 
                 if self.players_alive == len(self.wrong_answers):
                     for sock in self.wrong_answers:
@@ -127,12 +125,13 @@ class Server:
                     self.wrong_answers.clear()
                     self.answers = 0
                     self.question_index += 1
+
                     if self.question_index == len(self.questions):
                         self.shuffle()
                         self.question_index = 0
+
                     with self.condition:
                         self.condition.notify_all()
-                    self.send_stats_for_all()
 
                 elif self.players_alive == self.answers:
                     self.players_alive = len(self.correct_answers)
@@ -165,7 +164,11 @@ class Server:
         if winner == "Max Verstappen":
             message = "https:\/\/youtu.be\/cvj5OA1iQ8s?si=rS29y5nqHax1uDj7&t=14"
         else:
-            message = winner + " is the winner !"
+            message = ""
+            for sock in self.correct_answers.union(self.wrong_answers):
+                message += players[sock]["name"][:-1] + (
+                    " is correct!\n" if players[sock]["status"] else " is incorrect!\n")
+            message += "Game over!\nCongratulations to the winner: " + winner
         for sock in players.keys():
             self.send_to_TCP(message, sock)
         time.sleep(0.5)
@@ -227,11 +230,13 @@ class Server:
             self.players_alive += 1
             client_thread.start()
 
-        time.sleep(1)
-        print("Starting game...")
-        self.state = 1
+        if self.players_alive < 2:
+            print("Not enough players, restarting...")
+            self.reset()
 
-        # check that are enough players
+        else:
+            print("Starting game...")
+            self.state = 1
 
         with self.condition_gameManager:
             self.condition_gameManager.notify_all()
@@ -269,9 +274,6 @@ class Server:
                     with self.condition:
                         self.condition.wait()
                         continue
-
-            time.sleep(0.5)
-            # self.send_to_TCP("input", client_socket)
 
             data = self.receive_from_TCP(client_socket)
             if data == "":
@@ -336,3 +338,5 @@ class Server:
 
 server = Server()
 server.main_loop()
+#start the song du_du_du.mp3
+

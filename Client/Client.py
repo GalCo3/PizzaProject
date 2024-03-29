@@ -38,6 +38,22 @@ def parse_UDP_Message(data):
     return server_name, server_port
 
 
+def input_with_timeout(prompt, timeout):
+    sys.stdout.write(prompt)
+    sys.stdout.flush()
+    start_time = time.time()
+    input_data = ''
+    while True:
+        if msvcrt.kbhit():
+            char = msvcrt.getch()
+            if char == b'\r':  # Enter key
+                break
+            input_data += char.decode()
+        if time.time() - start_time > timeout:
+            break
+    return input_data
+
+
 class Client:
     def __init__(self, portListen):
         self.name = random.choice(names)
@@ -56,7 +72,6 @@ class Client:
         self.thread_STDOUT = None
 
         self.server_name = None
-        self.main_loop()
 
     def main_loop(self):
         print(self.name)
@@ -72,10 +87,9 @@ class Client:
         # start 2 threads, one for sending messages and one for receiving messages
 
         self.thread_STDOUT = threading.Thread(target=self.get_TCP_message)
-        #stdin for intervals for 5 seconds
+        # stdin for intervals for 5 seconds
         self.thread_STDIN = threading.Thread(target=self.send_TCP_message)
 
-        
         self.thread_STDOUT.start()
         self.thread_STDIN.start()
 
@@ -86,55 +100,41 @@ class Client:
         while not self.done:
             try:
                 data = self.TCP_Socket.recv(1024)
-                #check if socket is closed
+                # check if socket is closed
                 if not data:
                     raise ConnectionError
                 logging.info("Received: " + data.decode('utf-8'))
                 data = data.decode('utf-8').split('\x00')[0]
-                print("\n",data)
+                print("\n", data)
             # except timeout error
             except timeout as e:
                 print("Connection timed out")
                 continue
-            except ConnectionError or ConnectionResetError :
+            except ConnectionError or ConnectionResetError:
                 print("Connection closed")
                 self.done = True
-                #interrupt STDIN
+                # interrupt STDIN
                 self.thread_STDIN.join(0)
                 break
 
     def send_TCP_message(self):
         while not self.done:
             try:
-                #input timeout for 5 seconds
-
+                # input timeout for 5 seconds
+                message = ""
                 while not self.done:
-                    message = self.input_with_timeout("", 3)
+                    message = input_with_timeout("", 3)
                     if message:
                         break
-                
+
                 self.TCP_Socket.send(message.encode())
                 logging.info("Sent: " + message)
-                print("Sent: " + message)
-            except ConnectionError as e:
+                # print("Sent: " + message)
+            except ConnectionError:
                 print("Connection closed")
                 self.done = True
                 break
 
-    def input_with_timeout(self,prompt, timeout):
-        sys.stdout.write(prompt)
-        sys.stdout.flush()
-        start_time = time.time()
-        input_data = ''
-        while True:
-            if msvcrt.kbhit():
-                char = msvcrt.getch()
-                if char == b'\r':  # Enter key
-                    break
-                input_data += char.decode()
-            if time.time() - start_time > timeout:
-                break
-        return input_data
     def UDP_Listen(self):
 
         print("Client started, listening for offer requests...")
@@ -156,7 +156,8 @@ class Client:
                 break
 
     def TCP_Connect(self):
-        print("Received offer from " + self.server_name + ", attempting to connect...")
+        host_ip, _ = self.UDP_Socket.getsockname()  # for some reason host_ip is always 0.0.0.0, so it's not interesting
+        print("Received offer from \"" + self.server_name + "\", attempting to connect...")
         self.TCP_Socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.TCP_Socket.settimeout(10)
         try:
@@ -170,20 +171,6 @@ class Client:
             return False
 
 
-class Bot(Client):
-    def __init__(self, portListen):
-        super().__init__(portListen)
-        self.name = "BOT_" + self.name
-
-    def send_TCP_message(self):
-        while True:
-            try:
-                # True or
-                message = random.choice(["T", "F"])
-                self.TCP_Socket.send(message.encode())
-            except:
-                print("Connection closed")
-                break
-
-
-client = Client(13117)
+if __name__ == "__main__":
+    client = Client(13117)
+    client.main_loop()
