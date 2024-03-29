@@ -14,7 +14,7 @@ def create_message(server_name, port):
     server_name = server_name.ljust(32, '\0')
     server_port = port
     message = magic_cookie.to_bytes(4, byteorder='big') + message_type.to_bytes(1,
-                                                                                 byteorder='big') + server_name.encode() + server_port.to_bytes(
+                                                                                byteorder='big') + server_name.encode() + server_port.to_bytes(
         2, byteorder='big')
     return message
 
@@ -64,8 +64,8 @@ class Server:
     correct_answers = set()
     wrong_answers = set()
 
-    def __init__(self):
-        #start logging to the desktop
+    def __init__(self, min_players):
+        # start logging to the desktop
         logging.basicConfig(filename='Server.log', level=logging.DEBUG)
 
         random.shuffle(self.questions_order)
@@ -100,6 +100,7 @@ class Server:
     def reset(self):
         self.state = 0
         self.question_index = 0
+        global players
         players = {}
         self.answers = 0
         self.players_alive = 0
@@ -161,8 +162,10 @@ class Server:
                 # remove the last character which is a newline
                 winner = val["name"][:-1]
                 break
-
-        message = winner + " is the winner !"
+        if winner == "Max Verstappen":
+            message = "https:\/\/youtu.be\/cvj5OA1iQ8s?si=rS29y5nqHax1uDj7&t=14"
+        else:
+            message = winner + " is the winner !"
         for sock in players.keys():
             self.send_to_TCP(message, sock)
         time.sleep(0.5)
@@ -243,7 +246,7 @@ class Server:
                 data = client_socket.recv(1024)
                 logging.info("Received: " + data.decode())
                 players[client_socket]["name"] = data.decode()
-                print("Client name: ", players[client_socket]["name"],end="\n\n")
+                print("Client name: ", players[client_socket]["name"], end="\n\n")
             except:
                 print("timeout")
 
@@ -294,7 +297,6 @@ class Server:
             with self.condition:
                 self.condition.wait()
 
-
     def receive_from_TCP(self, socket):
         while True:
             try:
@@ -309,7 +311,7 @@ class Server:
             except timeout:
                 return "timeout"
 
-    def send_to_TCP(self,message, socket):
+    def send_to_TCP(self, message, socket):
         # pad message to 512 bytes
         # message = message.ljust(512, '\0')
 
@@ -330,6 +332,7 @@ class Server:
 
         with self.condition_gameManager:
             self.condition_gameManager.notify_all()
+
 
 server = Server()
 server.main_loop()
