@@ -60,7 +60,6 @@ class Server:
 
     answers = 0
     players_alive = 0
-    #socket_crashed = False
     lock = threading.Lock()
     correct_answers = set()
     wrong_answers = set()
@@ -90,15 +89,15 @@ class Server:
         while True:
             # print("New Game Started")
             # start UDP thread
-            self.UDP_server()
+            self.init_protocol_part_UDP()
             # start TCP thread
-            self.TCP_server()
+            self.init_protocol_part_TCP()
             # self.start_client_threads()
             # Game manager thread
-            self.game_manager()
-            self.reset()
+            self.init_game_manager()
+            self.reset_game()
 
-    def reset(self):
+    def reset_game(self):
         self.state = 0
         self.question_index = 0
         global players
@@ -108,9 +107,9 @@ class Server:
         self.correct_answers = set()
         self.wrong_answers = set()
         self.questions_order = [i for i in range(len(self.questions))]
-        self.shuffle()
+        self.shuffle_questions()
 
-    def game_manager(self):
+    def init_game_manager(self):
         if self.state == 0:
             with self.condition_gameManager:
                 self.condition_gameManager.wait()
@@ -120,7 +119,7 @@ class Server:
             with (self.lock):
 
                 if self.players_alive == len(self.wrong_answers):
-                    self.send_stats_for_all()
+                    self.report_end_of_round()
                     for sock in self.wrong_answers:
                         players[sock]["status"] = True
                     self.wrong_answers.clear()
@@ -128,7 +127,7 @@ class Server:
                     self.question_index += 1
 
                     if self.question_index == len(self.questions):
-                        self.shuffle()
+                        self.shuffle_questions()
                         self.question_index = 0
 
                     with self.condition:
@@ -140,14 +139,14 @@ class Server:
                     self.question_index += 1
 
                     if self.question_index == len(self.questions):
-                        self.shuffle()
+                        self.shuffle_questions()
                         self.question_index = 0
                     if self.players_alive == 1:
                         self.state = 2
-                        self.send_winner_for_all()
+                        self.report_winner()
                         time.sleep(0.1)
                     else:
-                        self.send_stats_for_all()
+                        self.report_end_of_round()
                     self.correct_answers.clear()
                     self.wrong_answers.clear()
                     with self.condition:
@@ -155,7 +154,7 @@ class Server:
         # print("End Game manager\n\n")
         return
 
-    def send_winner_for_all(self):
+    def report_winner(self):
         winner = ""
         for val in players.values():
             if val["status"]:
@@ -174,14 +173,14 @@ class Server:
                     " is correct!\n" if players[sock]["status"] else " is incorrect!\n")
             message += "Game over!\nCongratulations to the winner: " + winner
         for sock in players.keys():
-            self.send_to_TCP(message, sock)
+            self.send_message_to_client(message, sock)
         time.sleep(0.5)
 
         for sock in players.keys():  # close all sockets
             sock.close()
         print("Game over, sending out offer requests...")
 
-    def send_stats_for_all(self):
+    def report_end_of_round(self):
         message = ""
         for sock in self.correct_answers.union(self.wrong_answers):
             message += (players[sock]["name"][:-1] +
@@ -191,12 +190,12 @@ class Server:
             message += players[sock]["name"][:-1] + ", "
         message = message[:-2]
         for sock in players.keys():
-            self.send_to_TCP(message, sock)
+            self.send_message_to_client(message, sock)
 
-    def shuffle(self):
+    def shuffle_questions(self):
         random.shuffle(self.questions_order)
 
-    def UDP_server(self):
+    def init_protocol_part_UDP(self):
 
         message = create_message(self.server_name, self.port)
         # create a thread for the UDP server
@@ -210,15 +209,15 @@ class Server:
             self.UDP_socket.sendto(message, ('<broadcast>', 13117))
             time.sleep(1)
 
-    def TCP_server(self):
+    def init_protocol_part_TCP(self):
 
         self.TCP_socket.listen(1)
         self.TCP_socket.settimeout(1)
         # accept connection from client
-        self.TCP_thread = threading.Thread(target=self.TCP_accept)
+        self.TCP_thread = threading.Thread(target=self.handle_TCP_accept)
         self.TCP_thread.start()
 
-    def TCP_accept(self):
+    def handle_TCP_accept(self):
         last_accepted = None
         while True:
             if last_accepted is not None and time.time() - last_accepted > self.timeout:
@@ -233,13 +232,13 @@ class Server:
 
             # start thread for client
             players[client_socket] = {"name": None, "status": True}
-            client_thread = threading.Thread(target=self.TCP_client, args=(client_socket,))
+            client_thread = threading.Thread(target=self.handle_client_interaction, args=(client_socket,))
             self.players_alive += 1
             client_thread.start()
 
         if self.players_alive < 2:
             print("Not enough players, restarting...")
-            self.reset()
+            self.reset_game()
 
         else:
             print("Starting game...")
@@ -251,7 +250,7 @@ class Server:
         with self.condition:
             self.condition.notify_all()
 
-    def TCP_client(self, client_socket):
+    def handle_client_interaction(self, client_socket):
         # first receive is name
         while client_socket in players and players[client_socket]["name"] is None:
             try:
@@ -274,11 +273,11 @@ class Server:
         for ind,sock in enumerate(players.keys()):
             intro_msg += "Player " + str(ind+1) + ": " + players[sock]["name"]
         intro_msg += "\n"
-        self.send_to_TCP(intro_msg, client_socket)
+        self.send_message_to_client(intro_msg, client_socket)
         while self.state == 1:
 
             question = str(list(self.questions.keys())[self.questions_order[self.question_index]])
-            self.send_to_TCP("True or False: " + question, client_socket)
+            self.send_message_to_client("True or False: " + question, client_socket)
             # receive answer
             with self.lock:
                 if client_socket not in players:
@@ -288,7 +287,7 @@ class Server:
                         self.condition.wait()
                         continue
 
-            data = self.receive_from_TCP(client_socket)
+            data = self.receive_data_from_client(client_socket)
             if data == "":
                 break
 
@@ -312,7 +311,7 @@ class Server:
             with self.condition:
                 self.condition.wait()
 
-    def receive_from_TCP(self, sock):
+    def receive_data_from_client(self, sock):
         while True:
             try:
                 data = sock.recv(1024)
@@ -321,22 +320,21 @@ class Server:
                 return data
             except ConnectionError:
                 print("Connection closed")
-                self.socket_crashed(sock)
+                self.handle_socket_crash(sock)
                 return ""
             except timeout:
                 return "timeout"
 
-    def send_to_TCP(self, message, sock):
-
+    def send_message_to_client(self, message, sock):
         try:
             sock.send(message.encode())
             print(message)
             logging.info("Sent: " + message)
         # catch exception
         except ConnectionError:
-            self.socket_crashed(sock)
+            self.handle_socket_crash(sock)
 
-    def socket_crashed(self, sock):
+    def handle_socket_crash(self, sock):
         with self.lock:
             self.answers += 1
             # if exist
@@ -350,5 +348,3 @@ class Server:
 
 server = Server()
 server.main_loop()
-#start the song du_du_du.mp3
-

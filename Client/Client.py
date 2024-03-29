@@ -36,7 +36,7 @@ def parse_UDP_Message(data):
     return server_name, server_port
 
 
-def input_with_timeout(prompt, timeout):
+def retrieve_input_with_timeout(prompt, timeout):
     sys.stdout.write(prompt)
     sys.stdout.flush()
     start_time = time.time()
@@ -74,19 +74,19 @@ class Client:
     def main_loop(self):
         print(self.name)
         while True:
-            self.UDP_Listen()
+            self.listen_to_broadcasts()
             if self.TCP_Connect():
-                self.TCP_client()
+                self.init_TCP_client()
                 self.done = False
 
-    def TCP_client(self):
+    def init_TCP_client(self):
         # set the timeout to 20 seconds
         self.TCP_Socket.settimeout(20)
         # start 2 threads, one for sending messages and one for receiving messages
 
-        self.thread_STDOUT = threading.Thread(target=self.get_TCP_message)
+        self.thread_STDOUT = threading.Thread(target=self.receive_message_from_server)
         # stdin for intervals for 5 seconds
-        self.thread_STDIN = threading.Thread(target=self.send_TCP_message)
+        self.thread_STDIN = threading.Thread(target=self.send_data_to_server)
 
         self.thread_STDOUT.start()
         self.thread_STDIN.start()
@@ -94,7 +94,7 @@ class Client:
         self.thread_STDOUT.join()
         self.thread_STDIN.join()
 
-    def get_TCP_message(self):
+    def receive_message_from_server(self):
         while not self.done:
             try:
                 data = self.TCP_Socket.recv(1024)
@@ -115,13 +115,13 @@ class Client:
                 self.thread_STDIN.join(0)
                 break
 
-    def send_TCP_message(self):
+    def send_data_to_server(self):
         while not self.done:
             try:
                 # input timeout for 5 seconds
                 message = ""
                 while not self.done:
-                    message = input_with_timeout("", 3)
+                    message = retrieve_input_with_timeout("", 3)
                     if message:
                         break
 
@@ -133,7 +133,7 @@ class Client:
                 self.done = True
                 break
 
-    def UDP_Listen(self):
+    def listen_to_broadcasts(self):
 
         print("Client started, listening for offer requests...")
 
