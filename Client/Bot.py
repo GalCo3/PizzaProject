@@ -72,7 +72,7 @@ class Bot(Client):
                 print("Sent: " + message)
                 with self.condition:
                     self.condition.wait()
-                    # print("Waited")
+                time.sleep(1)
             except ConnectionError:
                 print("Connection closed")
                 self.done = True

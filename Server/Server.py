@@ -185,10 +185,21 @@ class Server:
         for sock in self.correct_answers.union(self.wrong_answers):
             message += (players[sock]["name"][:-1] +
                         (" is correct!\n" if players[sock]["status"] else " is incorrect!\n"))
+
         message += "\nNext round is played by "
-        for sock in players.keys():
-            message += players[sock]["name"][:-1] + ", "
-        message = message[:-2]
+
+        if self.players_alive == len(self.wrong_answers):
+            # Everyone answered wrong
+            for sock in players.keys():
+                message += players[sock]["name"][:-1] + ", "
+        else:
+            # At least one player answered correctly
+            for sock in players.keys():
+                if players[sock]["status"]:
+                    message += players[sock]["name"][:-1] + ", "
+
+        message = message[:-2] + "\n"
+
         for sock in players.keys():
             self.send_message_to_client(message, sock)
 
@@ -264,28 +275,35 @@ class Server:
                                                               "about Pizza!") + "\n"
 
         # sleep on state until notify
-
-        with self.condition:
-            self.condition.wait()
+        try:
+            with self.condition:
+                self.condition.wait()
+            client_socket.send("\0".encode())
+        except ConnectionError:
+            self.handle_socket_crash(client_socket)
+            self.players_alive -= 1
+            self.answers -= 1
+            return
 
         client_socket.settimeout(10)
 
         for ind,sock in enumerate(players.keys()):
             intro_msg += "Player " + str(ind+1) + ": " + players[sock]["name"]
         intro_msg += "\n"
+
         self.send_message_to_client(intro_msg, client_socket)
         while self.state == 1:
 
             question = str(list(self.questions.keys())[self.questions_order[self.question_index]])
             self.send_message_to_client("True or False: " + question, client_socket)
             # receive answer
-            with self.lock:
-                if client_socket not in players:
-                    return
-                elif not players[client_socket]["status"]:
-                    with self.condition:
-                        self.condition.wait()
-                        continue
+            # with self.lock:
+            if client_socket not in players:
+                return
+            elif not players[client_socket]["status"]:
+                with self.condition:
+                    self.condition.wait()
+                    continue
 
             data = self.receive_data_from_client(client_socket)
             if data == "":
