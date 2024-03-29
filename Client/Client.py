@@ -6,7 +6,6 @@ import threading
 import random
 import sys
 import msvcrt
-import select
 
 names = ["Galco", "Kitzer", "Kafire", "Megatron", "Max Verstappen", "Lebron James",
          "Megatron on the counter", "Element of surprise", "Every day another angle",
@@ -17,7 +16,6 @@ def parse_UDP_Message(data):
     if len(data) != 39:
         return False, False
 
-    temp1 = data[:4]
     # check if the message starts with 0xabcddcba
     if data[:4] != 0xabcddcba.to_bytes(4, byteorder='big'):
         return False, False
@@ -107,7 +105,7 @@ class Client:
                 data = data.decode('utf-8').split('\x00')[0]
                 print("\n", data)
             # except timeout error
-            except timeout as e:
+            except timeout:
                 print("Connection timed out")
                 continue
             except ConnectionError or ConnectionResetError:

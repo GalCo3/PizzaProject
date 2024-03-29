@@ -13,9 +13,9 @@ def create_message(server_name, port):
     # pad server name to 32 characters with null bytes
     server_name = server_name.ljust(32, '\0')
     server_port = port
-    message = magic_cookie.to_bytes(4, byteorder='big') + message_type.to_bytes(1,
-                                                                                byteorder='big') + server_name.encode() + server_port.to_bytes(
-        2, byteorder='big')
+    message = (magic_cookie.to_bytes(4, byteorder='big') +
+               message_type.to_bytes(1, byteorder='big') +
+               server_name.encode() + server_port.to_bytes(2, byteorder='big'))
     return message
 
 
@@ -60,7 +60,7 @@ class Server:
 
     answers = 0
     players_alive = 0
-    socket_crashed = False
+    #socket_crashed = False
     lock = threading.Lock()
     correct_answers = set()
     wrong_answers = set()
@@ -88,7 +88,7 @@ class Server:
 
     def main_loop(self):
         while True:
-            print("New Game Started")
+            # print("New Game Started")
             # start UDP thread
             self.UDP_server()
             # start TCP thread
@@ -120,6 +120,7 @@ class Server:
             with (self.lock):
 
                 if self.players_alive == len(self.wrong_answers):
+                    self.send_stats_for_all()
                     for sock in self.wrong_answers:
                         players[sock]["status"] = True
                     self.wrong_answers.clear()
@@ -138,20 +139,20 @@ class Server:
                     self.answers = 0
                     self.question_index += 1
 
-                    self.correct_answers.clear()
-                    self.wrong_answers.clear()
-
                     if self.question_index == len(self.questions):
                         self.shuffle()
                         self.question_index = 0
-                    self.send_stats_for_all()
                     if self.players_alive == 1:
                         self.state = 2
                         self.send_winner_for_all()
                         time.sleep(0.1)
+                    else:
+                        self.send_stats_for_all()
+                    self.correct_answers.clear()
+                    self.wrong_answers.clear()
                     with self.condition:
                         self.condition.notify_all()
-        print("End Game manager\n\n")
+        # print("End Game manager\n\n")
         return
 
     def send_winner_for_all(self):
@@ -162,7 +163,10 @@ class Server:
                 winner = val["name"][:-1]
                 break
         if winner == "Max Verstappen":
-            message = "https:\/\/youtu.be\/cvj5OA1iQ8s?si=rS29y5nqHax1uDj7&t=14"
+            message = "https://youtu.be/cvj5OA1iQ8s?si=qxiH7WyQzxHf4y-T&t=14"
+            pygame.mixer.init()
+            pygame.mixer.music.load("du_du_du.mp3")
+            pygame.mixer.music.play()
         else:
             message = ""
             for sock in self.correct_answers.union(self.wrong_answers):
@@ -175,16 +179,17 @@ class Server:
 
         for sock in players.keys():  # close all sockets
             sock.close()
-
-        print("Game Over - Winner is: ", winner)
+        print("Game over, sending out offer requests...")
 
     def send_stats_for_all(self):
         message = ""
-        for sock in self.correct_answers:
-            message += players[sock]["name"] + " is correct !\n"
-        for sock in self.wrong_answers:
-            message += players[sock]["name"] + " is incorrect !\n"
-
+        for sock in self.correct_answers.union(self.wrong_answers):
+            message += (players[sock]["name"][:-1] +
+                        (" is correct!\n" if players[sock]["status"] else " is incorrect!\n"))
+        message += "\nNext round is played by "
+        for sock in players.keys():
+            message += players[sock]["name"][:-1] + ", "
+        message = message[:-2]
         for sock in players.keys():
             self.send_to_TCP(message, sock)
 
@@ -197,10 +202,12 @@ class Server:
         # create a thread for the UDP server
         self.UDP_thread = threading.Thread(target=self.send_UDP_message, args=(message,))
         self.UDP_thread.start()
+        host_ip, _ = self.UDP_socket.getsockname()  # for some reason host_ip is always 0.0.0.0, so it's not relevant
+        print("Server started, listening for TCP requests...")
 
     def send_UDP_message(self, message):
         while self.state == 0:
-            sent = self.UDP_socket.sendto(message, ('<broadcast>', 13117))
+            self.UDP_socket.sendto(message, ('<broadcast>', 13117))
             time.sleep(1)
 
     def TCP_server(self):
@@ -254,6 +261,8 @@ class Server:
                 print("Client name: ", players[client_socket]["name"], end="\n\n")
             except:
                 print("timeout")
+        intro_msg = "Welcome to the \"" + self.server_name + ("\" server, where we are answering trivia questions "
+                                                              "about Pizza!") + "\n"
 
         # sleep on state until notify
 
@@ -262,10 +271,14 @@ class Server:
 
         client_socket.settimeout(10)
 
+        for ind,sock in enumerate(players.keys()):
+            intro_msg += "Player " + str(ind+1) + ": " + players[sock]["name"]
+        intro_msg += "\n"
+        self.send_to_TCP(intro_msg, client_socket)
         while self.state == 1:
 
             question = str(list(self.questions.keys())[self.questions_order[self.question_index]])
-            self.send_to_TCP(question, client_socket)
+            self.send_to_TCP("True or False: " + question, client_socket)
             # receive answer
             with self.lock:
                 if client_socket not in players:
@@ -299,38 +312,37 @@ class Server:
             with self.condition:
                 self.condition.wait()
 
-    def receive_from_TCP(self, socket):
+    def receive_from_TCP(self, sock):
         while True:
             try:
-                data = socket.recv(1024)
+                data = sock.recv(1024)
                 logging.info("Received: " + data.decode())
                 data = data.decode('utf-8').split('\x00')[0]
                 return data
-            except ConnectionError as e:
+            except ConnectionError:
                 print("Connection closed")
-                self.socket_crashed(socket)
+                self.socket_crashed(sock)
                 return ""
             except timeout:
                 return "timeout"
 
-    def send_to_TCP(self, message, socket):
-        # pad message to 512 bytes
-        # message = message.ljust(512, '\0')
+    def send_to_TCP(self, message, sock):
 
         try:
-            socket.send(message.encode())
+            sock.send(message.encode())
+            print(message)
             logging.info("Sent: " + message)
         # catch exception
-        except ConnectionError as e:
-            self.socket_crashed(socket)
+        except ConnectionError:
+            self.socket_crashed(sock)
 
-    def socket_crashed(self, socket):
+    def socket_crashed(self, sock):
         with self.lock:
             self.answers += 1
             # if exist
-            if socket in players:
-                print("Player ", players[socket]["name"], " has left the game.")
-                players.pop(socket)
+            if sock in players:
+                print("Player ", players[sock]["name"], " has left the game.")
+                players.pop(sock)
 
         with self.condition_gameManager:
             self.condition_gameManager.notify_all()
