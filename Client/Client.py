@@ -1,5 +1,6 @@
 import socket
 import time
+import logging
 import random
 names = ["Alice", "Bob", "Charlie", "David", "Eve", "Frank", "Grace", "Heidi", "Ivan", "Judy"]
 def parse_UDP_Message(data):
@@ -29,8 +30,8 @@ def parse_UDP_Message(data):
 
 class Client:
     def __init__(self, name, portListen):
-
         self.name = random.choice(names)
+        logging.basicConfig(filename=self.name+"_Client.log",level=logging.DEBUG)
 
         self.server_ip = None
 
@@ -58,13 +59,17 @@ class Client:
             try:
                 try:
                     data = self.TCP_Socket.recv(512)
+                    logging.info("Received data: " + data.decode('utf-8'))
                     data = data.decode('utf-8').split('\x00')[0]
+                    logging.info("Decoded data: " + data)
+                    
                 except:
                     break
                 if data == "":
                     continue
                 elif data == "wrong":
-                    self.done = True
+                    # logging.info("Done = True")
+                    # self.done = True
                     continue
                 elif data == "correct":
                     continue
@@ -73,12 +78,15 @@ class Client:
                     break
                 elif data != "input": # print the question \ winner message
                     print(data)
-                if not self.done and data == "input":
+                elif data == "input": #and not self.done
+                    logging.info("Waiting for input")
                     # get a char from keyboard and send it to the server
                     char = input("Enter Y,T,1 for True, or N,F,0 for False: ")
                     if char not in ['Y', 'T', '1', 'N', 'F', '0']:
                         continue
                     self.TCP_Socket.send(char.encode())
+                else:
+                    logging.info("Somthing Weird Happened - Done = " + self.done + " Data = " + data)
             except:
                 print("Something went wrong, trying to reconnect...")
                 break
