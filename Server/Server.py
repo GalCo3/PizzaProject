@@ -22,27 +22,26 @@ def create_message(server_name, port):
 def create_question_bank():
     # return a dictionary of questions and answers true or false
     return {
-        # "Pizza originated in Italy.": True,
-        # "Hawaiian pizza typically includes pineapple and ham toppings.": True,
-        # "The world's largest pizza ever made measured over 100 feet in diameter.": True,
-        # "The first pizzeria in the United States opened in New York City.": True,
-        # "Deep dish pizza was invented in Chicago.": True,
-        # "Pizza Margherita was named after a queen.": True,
-        # "The world's most expensive pizza costs over $12,000.": True,
-        # "Pizza Hut was founded in the 1950s.": True,
-        # "The pizza delivery industry is estimated to be worth over $10 billion annually.": True,
-        # "The record for the most pizzas made in one hour is over 6,000.": True,
-        # "Pizza boxes are generally square-shaped to fit the round pizza inside.": False,
-        # "Neapolitan pizza should have a thin, crispy crust.": False,
-        # "The pizza margherita was named after a famous Italian chef.": False,
-        # "Authentic Italian pizza is typically topped with cheddar cheese.": False,
-        # "The Hawaiian pizza originated in Hawaii.": False,
-        # "The world's largest pizza was cooked in less than an hour.": False,
-        # "The first frozen pizza was created in the 1940s.": False,
-        # "Pizza delivery was first introduced in the 19th century.": False,
-        # "The original pizza was sweet rather than savory.": False,
-        # "The word 'pizza' is derived from Greek.": False
-        "question1": True
+        "Pizza originated in Italy.": True,
+        "Hawaiian pizza typically includes pineapple and ham toppings.": True,
+        "The world's largest pizza ever made measured over 100 feet in diameter.": True,
+        "The first pizzeria in the United States opened in New York City.": True,
+        "Deep dish pizza was invented in Chicago.": True,
+        "Pizza Margherita was named after a queen.": True,
+        "The world's most expensive pizza costs over $12,000.": True,
+        "Pizza Hut was founded in the 1950s.": True,
+        "The pizza delivery industry is estimated to be worth over $10 billion annually.": True,
+        "The record for the most pizzas made in one hour is over 6,000.": True,
+        "Pizza boxes are generally square-shaped to fit the round pizza inside.": False,
+        "Neapolitan pizza should have a thin, crispy crust.": False,
+        "The pizza margherita was named after a famous Italian chef.": False,
+        "Authentic Italian pizza is typically topped with cheddar cheese.": False,
+        "The Hawaiian pizza originated in Hawaii.": False,
+        "The world's largest pizza was cooked in less than an hour.": False,
+        "The first frozen pizza was created in the 1940s.": False,
+        "Pizza delivery was first introduced in the 19th century.": False,
+        "The original pizza was sweet rather than savory.": False,
+        "The word 'pizza' is derived from Greek.": False
     }
 
 
@@ -64,6 +63,14 @@ class Server:
     correct_answers = set()
     wrong_answers = set()
 
+    players_wins = {}
+    players_strike_wins = {}
+    players_rounds = []
+    questions_percentage = {}
+    roundCounter = 0
+    currentWinner = ""
+    currentStrikeWinner = 0
+
     def __init__(self):
         # start logging to the desktop
         logging.basicConfig(filename='Server.log', level=logging.DEBUG)
@@ -84,6 +91,76 @@ class Server:
         self.condition = threading.Condition()
         self.condition_gameManager = threading.Condition()
         self.condition_stack = threading.Condition()
+
+    def top3_sort_winner(self, scores):
+        sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:3]
+        top3 = "DID YOU KNOW?? THE TOP-3 WINNERS ON THIS SERVER ARE:\n"
+        for i in range(len(sorted_scores)):
+            top3 += str(i + 1) + ". " + sorted_scores[i][0] + ": " + str(sorted_scores[i][1]) + " wins\n"
+        return top3
+
+    def top3_sort_rounds(self, rounds):
+        sorted_rounds = sorted(rounds, key=lambda x: x[1], reverse=True)[:3]
+        top3 = "DID YOU KNOW?? THE TOP-3 LONGEST ROUNDS ON THIS SERVER ARE:\n"
+        for i in range(len(sorted_rounds)):
+            top3 += str(i + 1) + ". " + str(sorted_rounds[i][1]) + "rounds (the winner was: " + sorted_rounds[i][0] + ")\n"
+        return top3
+    def top3_difficult_question(self, question_bank):
+        win_ratio = {name: round(val[0] / (val[1] + val[0]) * 100, 2) for name, val in question_bank.items()}
+        sorted_win_ratio = sorted(win_ratio.items(), key=lambda x: x[1], reverse=True)[:3]
+        top3 = "DID YOU KNOW?? THE TOP-3 MOST DIFFICULT QUESTIONS ON THIS SERVER ARE:\n"
+        for i in range(len(sorted_win_ratio)):
+            top3 += str(i + 1) + ". " + sorted_win_ratio[i][0] + ": " + str(sorted_win_ratio[i][1]) + " % from all the players were wrong\n"
+        return top3
+
+    def top3_sort_strike_winner(self, scores):
+        sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:3]
+        top3 = "DID YOU KNOW?? THE TOP-3 LONGEST WINNING STRIKES ON THIS SERVER ARE:\n"
+        for i in range(len(sorted_scores)):
+            top3 += str(i + 1) + ". " + sorted_scores[i][0] + ": " + str(sorted_scores[i][1]) + " strike wins\n"
+        return top3
+
+    def random_statistics(self):
+        action = random.randint(1, 4)
+        if action == 1:
+            return self.top3_sort_winner(self.players_wins)
+        elif action == 2:
+            return self.top3_sort_rounds(self.players_rounds)
+        elif action == 3:
+            return self.top3_difficult_question(self.questions_percentage)
+        else:
+            return self.top3_sort_strike_winner(self.players_strike_wins)
+
+    def handle_question_statistics(self):
+        question = str(list(self.questions.keys())[self.questions_order[self.question_index]])
+        #check if question is in the dictionary (key)
+        if question in self.questions_percentage:
+            self.questions_percentage[question][0] += len(self.wrong_answers)
+            self.questions_percentage[question][1] += len(self.correct_answers)
+        else:
+            self.questions_percentage[question] = [len(self.wrong_answers), len(self.correct_answers)]
+
+    def handle_winner_statistic(self, winner):
+        if winner in self.players_wins:
+            self.players_wins[winner] += 1
+        else:
+            self.players_wins[winner] = 1
+
+    def handle_round_statistic(self, winner):
+        self.players_rounds.append((winner, self.roundCounter))
+        self.roundCounter = 0
+
+    def handle_strike_winner_statistic(self, winner):
+        if winner == self.currentWinner:
+            self.currentStrikeWinner += 1
+            self.players_strike_wins[winner] = max(self.currentStrikeWinner,self.players_strike_wins[winner])
+        else:
+            self.currentWinner = winner
+            self.currentStrikeWinner = 1
+            if winner in self.players_strike_wins:
+                self.players_strike_wins[winner] = max(self.currentStrikeWinner,self.players_strike_wins[winner])
+            else:
+                self.players_strike_wins[winner] = self.currentStrikeWinner
 
     def main_loop(self):
         while True:
@@ -119,6 +196,8 @@ class Server:
             with (self.lock):
 
                 if self.players_alive == len(self.wrong_answers):
+                    self.handle_question_statistics()
+                    self.roundCounter += 1
                     self.report_end_of_round()
                     for sock in self.wrong_answers:
                         players[sock]["status"] = True
@@ -143,9 +222,13 @@ class Server:
                         self.question_index = 0
                     if self.players_alive == 1:
                         self.state = 2
+                        self.handle_question_statistics()
+                        self.roundCounter += 1
                         self.report_winner()
                         time.sleep(0.1)
                     else:
+                        self.handle_question_statistics()
+                        self.roundCounter += 1
                         self.report_end_of_round()
                     self.correct_answers.clear()
                     self.wrong_answers.clear()
@@ -161,6 +244,9 @@ class Server:
                 # remove the last character which is a newline
                 winner = val["name"][:-1]
                 break
+        self.handle_winner_statistic(winner)
+        self.handle_round_statistic(winner)
+        self.handle_strike_winner_statistic(winner)
         if winner == "Max Verstappen":
             message = "https://youtu.be/cvj5OA1iQ8s?si=qxiH7WyQzxHf4y-T&t=14"
             pygame.mixer.init()
@@ -174,6 +260,10 @@ class Server:
             message += "Game over!\nCongratulations to the winner: " + winner
         for sock in players.keys():
             self.send_message_to_client(message, sock)
+        time.sleep(0.5)
+
+        for sock in players.keys():
+            self.send_message_to_client(self.random_statistics(), sock)
         time.sleep(0.5)
 
         for sock in players.keys():  # close all sockets
