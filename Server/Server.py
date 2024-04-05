@@ -247,17 +247,19 @@ class Server:
         self.handle_winner_statistic(winner)
         self.handle_round_statistic(winner)
         self.handle_strike_winner_statistic(winner)
-        if winner == "Max Verstappen":
-            message = "https://youtu.be/cvj5OA1iQ8s?si=qxiH7WyQzxHf4y-T&t=14"
+        if winner == "Max Verstappen" or winner == "BOT_Max Verstappen":
+            # message = "https://youtu.be/cvj5OA1iQ8s?si=qxiH7WyQzxHf4y-T&t=14"
             pygame.mixer.init()
             pygame.mixer.music.load("du_du_du.mp3")
+            pygame.mixer.music.set_volume(0.07) # James Bond
             pygame.mixer.music.play()
-        else:
-            message = ""
-            for sock in self.correct_answers.union(self.wrong_answers):
-                message += players[sock]["name"][:-1] + (
-                    " is correct!\n" if players[sock]["status"] else " is incorrect!\n")
-            message += "Game over!\nCongratulations to the winner: " + winner
+
+        message = ""
+        for sock in self.correct_answers.union(self.wrong_answers):
+            message += players[sock]["name"][:-1] + (
+                " is correct!\n" if players[sock]["status"] else " is incorrect!\n")
+        message += "Game over!\nCongratulations to the winner: " + winner
+
         for sock in players.keys():
             self.send_message_to_client(message, sock)
         time.sleep(0.5)
@@ -399,7 +401,7 @@ class Server:
             if data == "":
                 break
 
-            answer = data in ['Y', 'T', '1']
+            answer = data in ['Y', 'T', '1','y','t']
             if not answer == self.questions[question] or data == "timeout":
                 players[client_socket]["status"] = False
                 # self.send_to_TCP("wrong", client_socket)
@@ -424,7 +426,12 @@ class Server:
             try:
                 data = sock.recv(1024)
                 logging.info("Received: " + data.decode())
-                data = data.decode('utf-8').split('\x00')[0]
+                data = data.decode('utf-8').strip()#.split('\x00')[0]
+                #trim data
+
+
+                if data not in ['Y', 'T', '1','y','t','F','f','N','n','0']:
+                    return "timeout"
                 return data
             except ConnectionError:
                 print("Connection closed")

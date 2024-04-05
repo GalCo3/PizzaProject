@@ -108,7 +108,7 @@ class Client:
                 if not data:
                     raise ConnectionError
                 logging.info("Received: " + data.decode('utf-8'))
-                data = data.decode('utf-8').split('\x00')[0]
+                data = data.decode('utf-8') #.split('\x00')[0]
                 print("\n",random.choice(self.colors) + data)
             # except timeout error
             except timeout:
