@@ -41,6 +41,7 @@ def parse_UDP_Message(data):
 
 
 def retrieve_input_with_timeout(prompt, timeout):
+    # Retrieves input with a timeout.
     sys.stdout.write(prompt)
     sys.stdout.flush()
     start_time = time.time()
@@ -86,70 +87,66 @@ class Client:
                 self.done = False
 
     def init_TCP_client(self):
-        # set the timeout to 20 seconds
+        # Initializes the TCP client.
+        # Sets the timeout to 20 seconds.
         self.TCP_Socket.settimeout(20)
-        # start 2 threads, one for sending messages and one for receiving messages
-
+        # Starts 2 threads, one for sending messages and one for receiving messages.
         self.thread_STDOUT = threading.Thread(target=self.receive_message_from_server)
-        # stdin for intervals for 5 seconds
+        # Stdin for intervals for 5 seconds.
         self.thread_STDIN = threading.Thread(target=self.send_data_to_server)
-
         self.thread_STDOUT.start()
         self.thread_STDIN.start()
-
         self.thread_STDOUT.join()
         self.thread_STDIN.join()
 
     def receive_message_from_server(self):
+        # Receives messages from the server.
         while not self.done:
             try:
                 data = self.TCP_Socket.recv(1024)
-                # check if socket is closed
+                # Check if socket is closed.
                 if not data:
                     raise ConnectionError
                 logging.info("Received: " + data.decode('utf-8'))
-                data = data.decode('utf-8') #.split('\x00')[0]
-                print("\n",random.choice(self.colors) + data)
-            # except timeout error
+                data = data.decode('utf-8')
+                print("\n", random.choice(self.colors) + data)
+            # Handles timeout error.
             except timeout:
                 print(random.choice(self.colors) + "Connection timed out")
                 continue
             except ConnectionError or ConnectionResetError:
                 print(random.choice(self.colors) + "Connection closed")
                 self.done = True
-                # interrupt STDIN
+                # Interrupt STDIN.
                 self.thread_STDIN.join(0)
                 break
 
     def send_data_to_server(self):
+        # Sends data to the server.
         while not self.done:
             try:
-                # input timeout for 5 seconds
+                # Input timeout for 5 seconds.
                 message = ""
                 while not self.done:
                     message = retrieve_input_with_timeout("", 3)
                     if message:
                         break
-
                 self.TCP_Socket.send(message.encode())
                 logging.info("Sent: " + message)
-                # print("Sent: " + message)
             except ConnectionError:
                 print(random.choice(self.colors) + "Connection closed")
                 self.done = True
                 break
 
     def listen_to_broadcasts(self):
-
+        # Listens to broadcasts.
         print(random.choice(self.colors) + "Client started, listening for offer requests...")
-
         self.UDP_Socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.UDP_Socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.UDP_Socket.bind(('', self.UDP_port))
-
         while True:
             data, addr = self.UDP_Socket.recvfrom(1024)
-            # parse the message
+            # Parse the message.
             server_name, server_port = parse_UDP_Message(data)
             if server_name == False or server_port == False:
                 continue
@@ -160,13 +157,14 @@ class Client:
                 break
 
     def TCP_Connect(self):
-        host_ip, _ = self.UDP_Socket.getsockname()  # for some reason host_ip is always 0.0.0.0, so it's not interesting
+        # Connects via TCP.
+        host_ip, _ = self.UDP_Socket.getsockname()  # For some reason host_ip is always 0.0.0.0, so it's not interesting.
         print(random.choice(self.colors) + "Received offer from \"" + self.server_name + "\", attempting to connect...")
         self.TCP_Socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.TCP_Socket.settimeout(10)
         try:
             self.TCP_Socket.connect((self.server_ip, self.TCP_port))
-            # send the client name
+            # Send the client name.
             self.TCP_Socket.send(self.name.encode() + b'\n')
             print(random.choice(self.colors) + "Connected to the server!")
             return True
